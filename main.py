@@ -15,6 +15,9 @@ from scipy.signal import butter, lfilter, freqz
 from scipy.fft import fft, ifft
 
 
+SAMPLING_FREQUENCY = 40000
+
+
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
@@ -48,6 +51,24 @@ def find_AngleOfArrival(delays, steering):
     AngleOfArrival = np.argmax(pattern)
     return AngleOfArrival, pattern
 
+VAD_THRESHOLD = 5  # minimum energy needed for diferentiating between signal and noise
+FRAME_DURATION = 30e-3
+FRAME_OVERLAP_DURATION = 10e-3
+FRAME_LENGTH = FRAME_DURATION * SAMPLING_FREQUENCY
+FRAME_OVERLAP_LENGTH = FRAME_OVERLAP_DURATION * SAMPLING_FREQUENCY
+def VAD(channel_ds):
+    ind = 0
+    frames = []
+    while ind + FRAME_LENGTH < channel_ds.shape[0]:
+        ind = ind + FRAME_LENGTH - FRAME_OVERLAP_LENGTH
+        channels_test = channel_ds[ind:ind + FRAME_LENGTH, :]
+        enengy_test = np.sum(channels_test ** 2, axis=1)
+        energy_check = enengy_test > VAD_THRESHOLD
+        frame_check = np.all(energy_check)
+        frame = [channels_test, frame_check]
+        frames.append(frame)
+        
+    return frames
 # from struct import 
 
 # creating a socket
@@ -55,7 +76,6 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 address = ("192.168.1.15", 5000)
 sock.bind(address)
 
-SAMPLING_FREQUENCY = 40000
 ORDER = 20
 # fs = 40000       # sample rate, Hz
 STOP_FREQUENCY = 5000  # desired cutoff frequency of the filter, Hz
@@ -119,14 +139,18 @@ while True:
                 # scipy.io.savemat('channel' + str(iChannel) + '.mat', {'mydata': channel_ds_ch}) # saving file for reading in MATLAB
             channel_ds = channel_ds[50:, :]
             
-            delays = find_delays(channel_ds)
-            AngleOfArrival, pattern = find_AngleOfArrival(delays, steering)
-            print('AngleOfArrival:    ', AngleOfArrival)
-            plt.figure()
-            theta = np.linspace(1, 180, 180)
-            plt.plot(theta, pattern)
-            plt.show()
             
+            frames = VAD(channel_ds)
+            AngleOfArrival_all = []
+            for frame in frames:
+                if frame[1]:
+                    channel_test = frame[0]
+                    delays = find_delays(channel_test)
+                    AngleOfArrival, pattern = find_AngleOfArrival(delays, steering)
+                    # print('AngleOfArrival:    ', AngleOfArrival)
+                    AngleOfArrival_all.append(AngleOfArrival)  
+                    
+            print(AngleOfArrival_all)        
             processFlag = False
             break
             
