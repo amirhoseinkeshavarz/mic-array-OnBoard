@@ -26,6 +26,27 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
     y = lfilter(b, a, data)
     return y
 
+DELAY_INTERVAR = 100
+def find_delays(channels_ds):
+    delays_mat = np.zeros(5, 5)
+    for iChannel in range(5):
+        for jChannel in range(5):
+            ch1 = np.fft(channels_ds[:, iChannel])
+            ch2 = np.fft(channel_ds[:, jChannel])
+            autocorrelatedSignal = np.ifft(ch1 * ch2)
+            autocorrelatedSignal = autocorrelatedSignal[int(autocorrelatedSignal.shape[0]/2) - DELAY_INTERVAR : int(autocorrelatedSignal.shape[0]/2) + DELAY_INTERVAR]
+            delays_mat[iChannel, jChannel] = int(autocorrelatedSignal.shape[0]/2) - np.argmax(autocorrelatedSignal)
+    delays = np.reshape(delays_mat, (1, -1))
+    return delays
+
+
+def find_AngleOfArrival(delays, steering):
+    pattern = np.zeros((180))
+    for theta in range(180):
+        pattern[theta] = np.dot(delays, steering[theta, :])
+
+    AngleOfArrival = np.argmax(pattern)
+    return AngleOfArrival, pattern
 
 # from struct import 
 
@@ -47,21 +68,22 @@ vMat = vMat.T
 channel_acc = np.zeros((1,8))
 counter = 0
 processFlag = False
-steering = np.zeros((6, 6, 180))
+
+# creating steering vector
+steering_mat = np.zeros((5, 5, 180))
 for iChannel in range(5):
     for jChannel in range(5):
         aa = MIC_POSITION[:,iChannel] - MIC_POSITION[:,jChannel]
         for kTheta in theta:
-            steering[iChannel,jChannel, int(kTheta)] = (SAMPLING_FREQUENCY/3e8) * np.dot(np.tile(aa, (vMat.shape[0], 1))[int(kTheta), :], vMat[int(kTheta), :])
+            steering_mat[iChannel,jChannel, int(kTheta)] = (SAMPLING_FREQUENCY/3e8) * np.dot(np.tile(aa, (vMat.shape[0], 1))[int(kTheta), :], vMat[int(kTheta), :])
+steering = np.reshape(steering_mat, (-1, steering_mat.shape[2]))
 
-
-
+# main loop
 while True:
     try:
         print(counter)
         counter += 1
 
-        
         rawData, server = sock.recvfrom(40900) # reading form socket. 10000 is buffer length 
         rawData = np.array([rawData[18:818]]) # discarding headers.
         dt = np.dtype('uint16')
@@ -75,6 +97,7 @@ while True:
         channel = channel / 2**10 # getting a float number between 0 and 1
         channel_acc = np.concatenate((channel_acc, channel), axis=0) # putting together packets
  
+
         if counter > 1000: # this specifies how many packet should put together and then played
             processFlag = True
             counter = 0
@@ -87,21 +110,25 @@ while True:
 
         # plt.figure()
             for iChannel in range(5):
-                channel_ds_ch = channel_ds[:, iChannel+0]
-                channel_ds_ch = butter_lowpass_filter(channel_ds_ch, STOP_FREQUENCY, SAMPLING_FREQUENCY, ORDER)
-                channel_ds_ch = channel_ds_ch[50:]
+                channel_ds[:, iChannel]= butter_lowpass_filter(channel_ds[:, iChannel], STOP_FREQUENCY, SAMPLING_FREQUENCY, ORDER)
+                # channel_ds[:, iChannel] = channel_ds[50:, iChannel]
                 # freq = np.linspace(-SAMPLING_FREQUENCY/2,SAMPLING_FREQUENCY/2,channel_ds_ch.shape[0])
                 # channel_spectrum = np.fft.fft(channel_ds_ch)
                 # channel_spectrum = np.fft.fftshift(channel_spectrum)
                 # cahnnel_spectrum_log = np.log10(channel_spectrum)
                 # scipy.io.savemat('channel' + str(iChannel) + '.mat', {'mydata': channel_ds_ch}) # saving file for reading in MATLAB
-                
-                
+            channel_ds = channel_ds[50:, :]
             
-            
+            delays = find_delays(channel_ds)
+            AngleOfArrival, pattern = find_AngleOfArrival(delays, steering)
+            print('AngleOfArrival:    ', AngleOfArrival)
+            plt.figure()
+            theta = np.linspace(1, 180, 180)
+            plt.plot(theta, pattern)
+            plt.show()
             
             processFlag = False
-            
+            break
             
     except Exception as err:
         print(err)
