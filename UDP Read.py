@@ -73,7 +73,7 @@ cutoff = 5000  # desired cutoff frequency of the filter, Hz
 # Get the filter coefficients so we can check its frequency response.
 b, a = butter_lowpass(cutoff, fs, order)
 plt.figure()
-for iChannel in range(6):
+for iChannel in range(5):
     channel_ds_ch = channel_ds[:, iChannel+0]
     channel_ds_ch = butter_lowpass_filter(channel_ds_ch, cutoff, fs, order)
     channel_ds_ch = channel_ds_ch[50:]
@@ -89,6 +89,8 @@ for iChannel in range(6):
     plt.show()
 plt.legend(['1','2','3','4','5','6'])
 sd.play(channel_ds_ch, SAMPLING_FREQUENCY/ds) # playing
+sock.close()
+
 # status = sd.wait()
 
 # scipy.io.savemat('test.mat', {'mydata': channel_acc}) # saving file for reading in MATLAB
