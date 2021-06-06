@@ -115,44 +115,25 @@ while True:
 
         # channel = channel - channel.mean() # eliminating DC
         channel = channel / 2**10 # getting a float number between 0 and 1
-        channel_acc = np.concatenate((channel_acc, channel), axis=0) # putting together packets
- 
-
-        if counter > 1000: # this specifies how many packet should put together and then played
-            processFlag = True
-            counter = 0
-            
-        if processFlag:
-            ds = 1 # DOWN SAMPLE rate
-            channel_ds = channel_acc[::ds]
-            channel_ds = channel_ds - channel_ds.mean()
-
-
-        # plt.figure()
-            for iChannel in range(5):
-                channel_ds[:, iChannel]= butter_lowpass_filter(channel_ds[:, iChannel], STOP_FREQUENCY, SAMPLING_FREQUENCY, ORDER)
-                # channel_ds[:, iChannel] = channel_ds[50:, iChannel]
-                # freq = np.linspace(-SAMPLING_FREQUENCY/2,SAMPLING_FREQUENCY/2,channel_ds_ch.shape[0])
-                # channel_spectrum = np.fft.fft(channel_ds_ch)
-                # channel_spectrum = np.fft.fftshift(channel_spectrum)
-                # cahnnel_spectrum_log = np.log10(channel_spectrum)
-                # scipy.io.savemat('channel' + str(iChannel) + '.mat', {'mydata': channel_ds_ch}) # saving file for reading in MATLAB
-            channel_ds = channel_ds[50:, :]
-            
-            
-            frames = VAD(channel_ds)
-            AngleOfArrival_all = []
-            for frame in frames:
-                if frame[1]:
-                    channel_test = frame[0]
-                    delays = find_delays(channel_test)
-                    AngleOfArrival, pattern = find_AngleOfArrival(delays, steering)
-                    # print('AngleOfArrival:    ', AngleOfArrival)
-                    AngleOfArrival_all.append(AngleOfArrival)  
-                    
-            print(AngleOfArrival_all)        
-            processFlag = False
-            break
+        # FILTERING
+        for iChannel in range(5):
+            channel[:, iChannel]= butter_lowpass_filter(channel[:, iChannel], STOP_FREQUENCY, SAMPLING_FREQUENCY, ORDER)
+        channel = channel[50:, :]
+        channel = channel - channel.mean()
+        
+        frames = VAD(channel)
+        AngleOfArrival_all = []
+        for frame in frames:
+            if frame[1]:
+                channel_test = frame[0]
+                delays = find_delays(channel_test)
+                AngleOfArrival, pattern = find_AngleOfArrival(delays, steering)
+                # print('AngleOfArrival:    ', AngleOfArrival)
+                AngleOfArrival_all.append(AngleOfArrival)  
+                
+        print(AngleOfArrival_all)
+    
+    
             
     except Exception as err:
         print(err)
