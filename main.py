@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon May 31 18:38:55 2021
-
-@author: ASUS
-"""
 
 import socket   # if error here, "pip install socket" in anaconda prompt
 import numpy as np
@@ -31,12 +25,12 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
 
 DELAY_INTERVAR = 100
 def find_delays(channels_ds):
-    delays_mat = np.zeros(5, 5)
+    delays_mat = np.zeros((5, 5))
     for iChannel in range(5):
         for jChannel in range(5):
-            ch1 = np.fft(channels_ds[:, iChannel])
-            ch2 = np.fft(channel_ds[:, jChannel])
-            autocorrelatedSignal = np.ifft(ch1 * ch2)
+            ch1 = np.fft.fft(channels_ds[:, iChannel])
+            ch2 = np.conj(np.fft.fft(channels_ds[:, jChannel]))
+            autocorrelatedSignal = abs(np.fft.fftshift(np.fft.ifft(ch1 * ch2)))
             autocorrelatedSignal = autocorrelatedSignal[int(autocorrelatedSignal.shape[0]/2) - DELAY_INTERVAR : int(autocorrelatedSignal.shape[0]/2) + DELAY_INTERVAR]
             delays_mat[iChannel, jChannel] = int(autocorrelatedSignal.shape[0]/2) - np.argmax(autocorrelatedSignal)
     delays = np.reshape(delays_mat, (1, -1))
@@ -46,27 +40,29 @@ def find_delays(channels_ds):
 def find_AngleOfArrival(delays, steering):
     pattern = np.zeros((180))
     for theta in range(180):
-        pattern[theta] = np.dot(delays, steering[theta, :])
+        pattern[theta] = np.sum(abs(delays[0, :]-steering[:, theta]))
 
-    AngleOfArrival = np.argmax(pattern)
+    AngleOfArrival = np.argmin(pattern)
     return AngleOfArrival, pattern
 
-VAD_THRESHOLD = 5  # minimum energy needed for diferentiating between signal and noise
-FRAME_DURATION = 30e-3
-FRAME_OVERLAP_DURATION = 10e-3
-FRAME_LENGTH = FRAME_DURATION * SAMPLING_FREQUENCY
-FRAME_OVERLAP_LENGTH = FRAME_OVERLAP_DURATION * SAMPLING_FREQUENCY
+VAD_THRESHOLD = 100  # minimum energy needed for diferentiating between signal and noise
+FRAME_DURATION = 3e-3
+FRAME_OVERLAP_DURATION = 1e-3
+FRAME_LENGTH = int(FRAME_DURATION * SAMPLING_FREQUENCY)
+FRAME_OVERLAP_LENGTH = int(FRAME_OVERLAP_DURATION * SAMPLING_FREQUENCY)
 def VAD(channel_ds):
     ind = 0
     frames = []
     while ind + FRAME_LENGTH < channel_ds.shape[0]:
-        ind = ind + FRAME_LENGTH - FRAME_OVERLAP_LENGTH
+        
         channels_test = channel_ds[ind:ind + FRAME_LENGTH, :]
-        enengy_test = np.sum(channels_test ** 2, axis=1)
+        enengy_test = np.sum(channels_test ** 2, axis=0)
+        enengy_test = enengy_test[0:5]
         energy_check = enengy_test > VAD_THRESHOLD
         frame_check = np.all(energy_check)
         frame = [channels_test, frame_check]
         frames.append(frame)
+        ind = ind + FRAME_LENGTH - FRAME_OVERLAP_LENGTH
         
     return frames
 # from struct import 
@@ -79,7 +75,8 @@ sock.bind(address)
 ORDER = 20
 # fs = 40000       # sample rate, Hz
 STOP_FREQUENCY = 5000  # desired cutoff frequency of the filter, Hz
-MIC_POSITION  = np.array([list(range(-2,3)) , np.zeros(5)])
+SOUND_VELOCITY =  343; # in m/s
+MIC_POSITION  = np.array([list(range(-2,3)) , np.zeros(5)]) * 0.061 
 theta = np.linspace(0,180,180) * np.pi/180
 vMat = np.array([np.cos(theta), np.sin(theta)])
 vMat = vMat.T
@@ -94,8 +91,8 @@ steering_mat = np.zeros((5, 5, 180))
 for iChannel in range(5):
     for jChannel in range(5):
         aa = MIC_POSITION[:,iChannel] - MIC_POSITION[:,jChannel]
-        for kTheta in theta:
-            steering_mat[iChannel,jChannel, int(kTheta)] = (SAMPLING_FREQUENCY/3e8) * np.dot(np.tile(aa, (vMat.shape[0], 1))[int(kTheta), :], vMat[int(kTheta), :])
+        for kTheta in range(len(theta)):
+            steering_mat[iChannel,jChannel, int(kTheta)] = -np.round((SAMPLING_FREQUENCY/SOUND_VELOCITY) * np.dot(np.tile(aa, (vMat.shape[0], 1))[int(kTheta), :], vMat[int(kTheta), :]))
 steering = np.reshape(steering_mat, (-1, steering_mat.shape[2]))
 
 # main loop
@@ -137,8 +134,7 @@ while True:
                 # channel_spectrum = np.fft.fftshift(channel_spectrum)
                 # cahnnel_spectrum_log = np.log10(channel_spectrum)
                 # scipy.io.savemat('channel' + str(iChannel) + '.mat', {'mydata': channel_ds_ch}) # saving file for reading in MATLAB
-            channel_ds = channel_ds[50:, :]
-            
+            channel_ds = channel_ds[51:, :]
             
             frames = VAD(channel_ds)
             AngleOfArrival_all = []
