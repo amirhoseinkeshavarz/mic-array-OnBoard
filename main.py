@@ -25,16 +25,18 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
 
 DELAY_INTERVAR = 100
 def find_delays(channels_ds):
-    delays_mat = np.zeros((5, 5))
+    delays_mat = np.zeros((5))
     for iChannel in range(5):
-        for jChannel in range(5):
-            ch1 = np.fft.fft(channels_ds[:, iChannel])
-            ch2 = np.conj(np.fft.fft(channels_ds[:, jChannel]))
-            autocorrelatedSignal = abs(np.fft.fftshift(np.fft.ifft(ch1 * ch2)))
-            autocorrelatedSignal = autocorrelatedSignal[int(autocorrelatedSignal.shape[0]/2) - DELAY_INTERVAR : int(autocorrelatedSignal.shape[0]/2) + DELAY_INTERVAR]
-            delays_mat[iChannel, jChannel] = int(autocorrelatedSignal.shape[0]/2) - np.argmax(autocorrelatedSignal)
-    delays = np.reshape(delays_mat, (1, -1))
-    return delays
+        ch1 = np.fft.fft(channels_ds[:, iChannel])
+        ch2 = np.conj(np.fft.fft(channels_ds[:, 0]))
+        autocorrelatedSignal = np.fft.fftshift(np.fft.ifft(ch1 * ch2))
+        # autocorrelatedSignal = autocorrelatedSignal[int(autocorrelatedSignal.shape[0]/2) - DELAY_INTERVAR : int(autocorrelatedSignal.shape[0]/2) + DELAY_INTERVAR]
+        delays_mat[iChannel] = int(autocorrelatedSignal.shape[0]/2) - np.argmax(autocorrelatedSignal)
+    
+    delays_mat_hor = np.tile(delays_mat, (5, 1))
+    delays_mat_ver = delays_mat_hor.T
+    delays = delays_mat_ver  - delays_mat_hor
+    return np.reshape(delays, (1, -1))
 
 
 def find_AngleOfArrival(delays, steering):
@@ -42,10 +44,10 @@ def find_AngleOfArrival(delays, steering):
     for theta in range(180):
         pattern[theta] = np.sum(abs(delays[0, :]-steering[:, theta]))
 
-    AngleOfArrival = np.argmin(pattern)
+    AngleOfArrival = np.argmin(pattern)+1
     return AngleOfArrival, pattern
 
-VAD_THRESHOLD = 100  # minimum energy needed for diferentiating between signal and noise
+VAD_THRESHOLD = 70  # minimum energy needed for diferentiating between signal and noise
 FRAME_DURATION = 3e-3
 FRAME_OVERLAP_DURATION = 1e-3
 FRAME_LENGTH = int(FRAME_DURATION * SAMPLING_FREQUENCY)
@@ -58,6 +60,7 @@ def VAD(channel_ds):
         channels_test = channel_ds[ind:ind + FRAME_LENGTH, :]
         enengy_test = np.sum(channels_test ** 2, axis=0)
         enengy_test = enengy_test[0:5]
+        # print("energy of 1st channel:   ", enengy_test[0])
         energy_check = enengy_test > VAD_THRESHOLD
         frame_check = np.all(energy_check)
         frame = [channels_test, frame_check]
@@ -65,6 +68,15 @@ def VAD(channel_ds):
         ind = ind + FRAME_LENGTH - FRAME_OVERLAP_LENGTH
         
     return frames
+
+VAD2_THRESHOLD = 1
+def VAD2(channel_ds):
+    channel_test = channel_ds[:, 0]
+    ind = np.argwhere(channel_test > VAD2_THRESHOLD)
+    ind_min = np.min(ind)
+    frame = channel_ds[ind_min-30 : ind_min + 100, :]
+    
+    return [[frame, True]]
 # from struct import 
 
 # creating a socket
@@ -133,10 +145,11 @@ while True:
                 # channel_spectrum = np.fft.fft(channel_ds_ch)
                 # channel_spectrum = np.fft.fftshift(channel_spectrum)
                 # cahnnel_spectrum_log = np.log10(channel_spectrum)
-                # scipy.io.savemat('channel' + str(iChannel) + '.mat', {'mydata': channel_ds_ch}) # saving file for reading in MATLAB
+                scipy.io.savemat('channel' + str(iChannel) + '.mat', {'mydata': channel_ds[:, iChannel]}) # saving file for reading in MATLAB
             channel_ds = channel_ds[51:, :]
             
-            frames = VAD(channel_ds)
+            # frames = VAD(channel_ds)
+            frames = VAD2(channel_ds)
             AngleOfArrival_all = []
             for frame in frames:
                 if frame[1]:

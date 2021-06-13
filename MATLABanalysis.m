@@ -38,6 +38,7 @@ pattern = sum(abs(maxRelativeReshaped - steeringReshaped));
 % figure; plot(abs(pattern))
 [~,phiEstimated] = min(abs(pattern))
 
+figure; plot(pattern); grid on
 diff(maxIdx);
 % figure; plot(db(matched.'))
 %
