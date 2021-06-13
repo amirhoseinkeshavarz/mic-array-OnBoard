@@ -26,16 +26,16 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
     y = lfilter(b, a, data)
     return y
 
-DELAY_INTERVAR = 100
+DELAY_INTERVAL = 100
 def find_delays(channels_ds):
-    delays_mat = np.zeros(5, 5)
+    delays_mat = np.zeros((5, 5))
     for iChannel in range(5):
         for jChannel in range(5):
-            ch1 = np.fft(channels_ds[:, iChannel])
-            ch2 = np.fft(channel_ds[:, jChannel])
-            autocorrelatedSignal = np.ifft(ch1 * ch2)
-            autocorrelatedSignal = autocorrelatedSignal[int(autocorrelatedSignal.shape[0]/2) - DELAY_INTERVAR : int(autocorrelatedSignal.shape[0]/2) + DELAY_INTERVAR]
-            delays_mat[iChannel, jChannel] = int(autocorrelatedSignal.shape[0]/2) - np.argmax(autocorrelatedSignal)
+            ch1 = np.fft.fft(channels_ds[:, iChannel])
+            ch2 = np.conj(np.fft.fft(channel_ds[:, jChannel]))
+            autocorrelatedSignal = np.fft.fftshift(np.real(np.fft.ifft(ch1 * ch2)))
+            autocorrelatedSignal = autocorrelatedSignal[int(autocorrelatedSignal.shape[0]/2) - DELAY_INTERVAL : int(autocorrelatedSignal.shape[0]/2) + DELAY_INTERVAL]
+            delays_mat[iChannel, jChannel] = - int(autocorrelatedSignal.shape[0]/2) + np.argmax(autocorrelatedSignal)
     delays = np.reshape(delays_mat, (1, -1))
     return delays
 
@@ -43,7 +43,7 @@ def find_delays(channels_ds):
 def find_AngleOfArrival(delays, steering):
     pattern = np.zeros((180))
     for theta in range(180):
-        pattern[theta] = np.dot(delays, steering[theta, :])
+        pattern[theta] = np.dot(delays, steering[:, theta])
 
     AngleOfArrival = np.argmax(pattern)
     return AngleOfArrival, pattern
@@ -59,7 +59,7 @@ SAMPLING_FREQUENCY = 40000
 ORDER = 20
 # fs = 40000       # sample rate, Hz
 STOP_FREQUENCY = 5000  # desired cutoff frequency of the filter, Hz
-MIC_POSITION  = np.array([list(range(-2,3)) , np.zeros(5)])
+MIC_POSITION  = np.array([list(range(-2,3)) , np.zeros(5)])*0.061
 theta = np.linspace(0,180,180) * np.pi/180
 vMat = np.array([np.cos(theta), np.sin(theta)])
 vMat = vMat.T
@@ -108,7 +108,7 @@ while True:
             channel_ds = channel_ds - channel_ds.mean()
 
 
-        # plt.figure()
+            plt.figure()
             for iChannel in range(5):
                 channel_ds[:, iChannel]= butter_lowpass_filter(channel_ds[:, iChannel], STOP_FREQUENCY, SAMPLING_FREQUENCY, ORDER)
                 # channel_ds[:, iChannel] = channel_ds[50:, iChannel]
@@ -117,7 +117,10 @@ while True:
                 # channel_spectrum = np.fft.fftshift(channel_spectrum)
                 # cahnnel_spectrum_log = np.log10(channel_spectrum)
                 # scipy.io.savemat('channel' + str(iChannel) + '.mat', {'mydata': channel_ds_ch}) # saving file for reading in MATLAB
-            channel_ds = channel_ds[50:, :]
+                plt.plot(channel_ds[:, iChannel])
+            
+            plt.show()
+            channel_ds = channel_ds[51:, :]
             
             delays = find_delays(channel_ds)
             AngleOfArrival, pattern = find_AngleOfArrival(delays, steering)
